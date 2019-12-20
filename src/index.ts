@@ -1,7 +1,10 @@
-function isFunction(fn: any): boolean {
+function isFunction(fn: unknown): fn is Function {
   return typeof fn === 'function';
 }
 
+function isThenable<T>(obj: any): obj is PromiseLike<T> {
+  return obj.then && isFunction(obj.then);
+}
 enum STATE {
   PENDING = 'PENDING',
   FULLFILLED = 'FULLFILLED',
@@ -52,8 +55,7 @@ export class MyPromise<T> {
       return;
     }
 
-    // @ts-ignore
-    if (value.then && isFunction(value.then)) {
+    if (isThenable(value)) {
       try {
         return value.then.call(
           value,
@@ -75,7 +77,7 @@ export class MyPromise<T> {
     });
   }
 
-  reject(reason?: any): MyPromise<T> {
+  reject(reason?: any): PromiseLike<T> {
     if (this._state !== STATE.PENDING) {
       return;
     }
@@ -87,7 +89,7 @@ export class MyPromise<T> {
   }
 
   then<TResult1 = T, TResult2 = never>(
-    _onfullfilled: (value?: T) => TResult1 | void,
+    _onfullfilled: (value?: T | PromiseLike<T>) => TResult1 | void,
     _onrejected?: (reason?: any) => TResult2
   ): any {
     _onfullfilled = isFunction(_onfullfilled) ? _onfullfilled : () => {};
@@ -102,7 +104,7 @@ export class MyPromise<T> {
      * then的_onrejected如果没有抛出错误，那么该then的promise也需要resolve
      */
     return new MyPromise((resolve, reject) => {
-      const onfullfilled = (res: T) =>
+      const onfullfilled = (res: T | PromiseLike<T>) =>
         setImmediate(() => resolve(_onfullfilled(res)));
       const onrejected = () => {
         try {
