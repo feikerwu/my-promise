@@ -1,3 +1,7 @@
+function isFunction(fn: any): boolean {
+  return typeof fn === 'function';
+}
+
 enum STATE {
   PENDING = 'PENDING',
   FULLFILLED = 'FULLFILLED',
@@ -9,10 +13,23 @@ interface ThenCallback<T> {
   onrejected: (reason?: any) => any;
 }
 
+interface PromiseLike<T> {
+  then<TResult1 = T, TResult2 = never>(
+    onfullfilled?: (
+      value: T
+    ) => TResult1 | PromiseLike<TResult1> | undefined | null,
+    onrejected?: (
+      reason: any
+    ) => TResult2 | PromiseLike<TResult2> | undefined | null
+  ): PromiseLike<TResult1 | TResult2>;
+}
+
+// type thenable = T extends {then: any}
+
 export class MyPromise<T> {
   private _state: STATE = STATE.PENDING;
   private chain: ThenCallback<T>[] = [];
-  private value: T;
+  private value: T | PromiseLike<T>;
 
   constructor(
     executor: (
@@ -30,13 +47,27 @@ export class MyPromise<T> {
     }
   }
 
-  resolve(value?: T): MyPromise<T> {
+  resolve(value?: T | PromiseLike<T>): PromiseLike<T> {
     if (this._state !== STATE.PENDING) {
       return;
     }
 
+    // @ts-ignore
+    if (value.then && isFunction(value.then)) {
+      try {
+        return value.then.call(
+          value,
+          v => this.resolve(v),
+          err => this.reject(err)
+        );
+      } catch (err) {
+        return this.reject(err);
+      }
+    }
+
     this._state = STATE.FULLFILLED;
     this.value = value;
+
     this.chain.forEach(({ onfullfilled }) => {
       setImmediate(() => {
         onfullfilled(value);
@@ -56,22 +87,43 @@ export class MyPromise<T> {
   }
 
   then<TResult1 = T, TResult2 = never>(
-    onfullfilled?: (value: T) => TResult1,
-    onrejected?: (reason: any) => TResult2
+    _onfullfilled: (value?: T) => TResult1 | void,
+    _onrejected?: (reason?: any) => TResult2
   ): any {
-    const { _state, value } = this;
-    if (_state === STATE.FULLFILLED) {
-      setImmediate(() => this.resolve(value));
-      return;
-    }
+    _onfullfilled = isFunction(_onfullfilled) ? _onfullfilled : () => {};
 
-    if (_state === STATE.REJECTED) {
-      setImmediate(() => this.reject());
-      return;
-    }
+    _onrejected = isFunction(_onrejected)
+      ? _onrejected
+      : err => {
+          throw err;
+        };
+    /**
+     * then 返回一个promise，then的回调结果作为resolve的结果
+     * then的_onrejected如果没有抛出错误，那么该then的promise也需要resolve
+     */
+    return new MyPromise((resolve, reject) => {
+      const onfullfilled = (res: T) =>
+        setImmediate(() => resolve(_onfullfilled(res)));
+      const onrejected = () => {
+        try {
+          setImmediate(() => resolve(_onrejected()));
+        } catch (e) {
+          reject(e);
+        }
+      };
 
-    this.chain.push({ onfullfilled, onrejected });
-    return this;
+      const { _state, value } = this;
+
+      if (_state === STATE.FULLFILLED) {
+        return onfullfilled(value);
+      }
+
+      if (_state === STATE.REJECTED) {
+        return onrejected();
+      }
+
+      this.chain.push({ onfullfilled, onrejected });
+    });
   }
 
   get state() {
