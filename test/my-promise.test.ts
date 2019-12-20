@@ -20,3 +20,11 @@ test('state should equl REJECTED when function resolve been invoked', () => {
   p.reject();
   expect(p.state).toEqual('REJECTED');
 });
+
+test('my promise should be thenable', () => {
+  expect(init()).toHaveProperty('then');
+});
+
+test(
+  'the thenable onfullfilled should be called after state change to onfullfilled'
+);

@@ -4,9 +4,15 @@ enum STATE {
   REJECTED = 'REJECTED'
 }
 
+interface ThenCallback<T> {
+  onfullfilled: (value?: T) => any;
+  onrejected: (reason?: any) => any;
+}
+
 export class MyPromise<T> {
   private _state: STATE = STATE.PENDING;
-  private value: any;
+  private chain: ThenCallback<T>[] = [];
+  private value: T;
 
   constructor(
     executor: (
@@ -24,36 +30,48 @@ export class MyPromise<T> {
     }
   }
 
-  resolve<T>(value?: T): MyPromise<T> {
+  resolve(value?: T): MyPromise<T> {
     if (this._state !== STATE.PENDING) {
       return;
     }
 
     this._state = STATE.FULLFILLED;
     this.value = value;
-
-    return null;
+    this.chain.forEach(({ onfullfilled }) => {
+      setImmediate(() => {
+        onfullfilled(value);
+      });
+    });
   }
 
-  reject<T>(reason?: any): MyPromise<T> {
+  reject(reason?: any): MyPromise<T> {
     if (this._state !== STATE.PENDING) {
       return;
     }
 
     this._state = STATE.REJECTED;
-    return null;
+    this.chain.forEach(({ onrejected }) => {
+      setImmediate(reason => onrejected(reason));
+    });
   }
 
   then<TResult1 = T, TResult2 = never>(
-    onfulfilled?: (value: T) => TResult1,
+    onfullfilled?: (value: T) => TResult1,
     onrejected?: (reason: any) => TResult2
   ): any {
     const { _state, value } = this;
     if (_state === STATE.FULLFILLED) {
-      onfulfilled(value);
-    } else if (_state === STATE.REJECTED) {
-      onrejected(value);
+      setImmediate(() => this.resolve(value));
+      return;
     }
+
+    if (_state === STATE.REJECTED) {
+      setImmediate(() => this.reject());
+      return;
+    }
+
+    this.chain.push({ onfullfilled, onrejected });
+    return this;
   }
 
   get state() {
