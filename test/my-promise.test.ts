@@ -25,6 +25,15 @@ test('my promise should be thenable', () => {
   expect(init()).toHaveProperty('then');
 });
 
-test(
-  'the thenable onfullfilled should be called after state change to onfullfilled'
-);
+test('the thenable onfullfilled should be called after state change to onfullfilled', () => {
+  let p = init();
+  expect(p.state).toEqual('PENDING');
+  p.resolve();
+  expect(p.state).toEqual('FULLFILLED');
+});
+
+test('reject should throw an error when promise state turn to fullfilled', () => {
+  let p = init();
+  p.resolve();
+  expect(() => p.reject()).toThrow();
+});

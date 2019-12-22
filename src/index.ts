@@ -3,7 +3,7 @@ function isFunction(fn: unknown): fn is Function {
 }
 
 function isThenable<T>(obj: any): obj is PromiseLike<T> {
-  return obj.then && isFunction(obj.then);
+  return obj && obj.then && isFunction(obj.then);
 }
 enum STATE {
   PENDING = 'PENDING',
@@ -79,6 +79,11 @@ export class MyPromise<T> {
 
   reject(reason?: any): PromiseLike<T> {
     if (this._state !== STATE.PENDING) {
+      if (this._state === STATE.FULLFILLED) {
+        throw new Error(
+          `can't be called when the state equal to ${STATE.FULLFILLED}`
+        );
+      }
       return;
     }
 
